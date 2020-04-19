@@ -22,6 +22,7 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self.sheet_dict = dict()
         self.logger = eclog(os.path.split(__file__)[-1]).GetLogger()
         self.__is_ui_ready = False
+        self.__is_clear = False
 
         super(VisualizationConnection, self).__init__(parent)
         self.setupUi(self)
@@ -40,7 +41,6 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self.tableClinicalStatistic.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.comboSheet.currentIndexChanged.connect(self.UpdateSheet)
         self.checkMaxFeatureNumber.stateChanged.connect(self.UpdateSheet)
-        # self.tableClinicalStatistic.doubleClicked.connect(self.ShowOneResult)
         self.tableClinicalStatistic.itemSelectionChanged.connect(self.ShowOneResult)
 
         # Update ROC canvas
@@ -66,7 +66,9 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self.checkPlotCVTrain.stateChanged.connect(self.UpdatePlot)
         self.checkPlotCVValidation.stateChanged.connect(self.UpdatePlot)
         self.checkPlotTrain.stateChanged.connect(self.UpdatePlot)
-        # self.checkPlotTest.stateChanged.connect(self.UpdatePlot)
+        self.checkPlotOneSE.stateChanged.connect(self.UpdatePlot)
+        self.checkPlotTest.stateChanged.connect(self.UpdatePlot)
+       #
 
         # Update Contribution canvas
         self.radioContributionFeatureSelector.toggled.connect(self.UpdateContribution)
@@ -108,7 +110,7 @@ class VisualizationConnection(QWidget, Ui_Visualization):
             self.buttonLoadResult.setEnabled(False)
 
     def ClearAll(self):
-
+        self.__is_clear = True
         self.buttonLoadResult.setEnabled(True)
         self.buttonSave.setEnabled(False)
         self.buttonClearResult.setEnabled(False)
@@ -120,8 +122,8 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self.checkPlotCVTrain.setChecked(False)
         self.checkPlotCVValidation.setChecked(False)
         self.checkPlotTrain.setChecked(False)
-        # self.checkPlotTest.setChecked(False)
-        self.radioContributionFeatureSelector.setChecked(True)
+        self.checkPlotOneSE.setChecked(False)
+        self.checkPlotTest.setChecked(False)
         self.radioContributionFeatureSelector.setChecked(False)
         self.checkMaxFeatureNumber.setChecked(False)
         self.canvasROC.getFigure().clear()
@@ -161,7 +163,6 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self.spinContributeFeatureNumber.setValue(1)
 
         self.tableClinicalStatistic.clear()
-
         self.tableClinicalStatistic.setRowCount(0)
         self.tableClinicalStatistic.setColumnCount(0)
         self.tableClinicalStatistic.setHorizontalHeaderLabels(list([]))
@@ -171,6 +172,7 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self._root_folder = ''
         self.sheet_dict = dict()
         self.__is_ui_ready = False
+        self.__is_clear = False
 
     def Save(self):
         dlg = QFileDialog()
@@ -334,7 +336,7 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         return index
 
     def UpdatePlot(self):
-        if not self.__is_ui_ready:
+        if (not self.__is_ui_ready) or self.__is_clear:
             return
 
         if self.comboPlotX.count() == 0:
@@ -393,18 +395,19 @@ class VisualizationConnection(QWidget, Ui_Visualization):
                 show_data.append(temp[tuple(index)].tolist())
                 show_data_std.append(auc_std[tuple(index)].tolist())
                 name_list.append('Train')
-            # if self.checkPlotTest.isChecked():
-            #     temp = deepcopy(self._fae.GetAUCMetric()['test'])
-            #     auc_std = deepcopy(self._fae.GetAUCstdMetric()['test'])
-            #     if temp.size > 0:
-            #         show_data.append(temp[tuple(index)].tolist())
-            #         show_data_std.append(auc_std[tuple(index)].tolist())
-            #         name_list.append('Test')
+            if self.checkPlotTest.isChecked():
+                temp = deepcopy(self._fae.GetAUCMetric()['test'])
+                auc_std = deepcopy(self._fae.GetAUCstdMetric()['test'])
+                if temp.size > 0:
+                    show_data.append(temp[tuple(index)].tolist())
+                    show_data_std.append(auc_std[tuple(index)].tolist())
+                    name_list.append('Test')
+
 
         if len(show_data) > 0:
             if selected_index == 3:
                 DrawCurve(x_ticks, show_data, show_data_std, xlabel=x_label, ylabel=self.comboPlotY.currentText(),
-                          name_list=name_list, is_show=False, fig=self.canvasPlot.getFigure())
+                          name_list=name_list, is_show=False, one_se=self.checkPlotOneSE.isChecked(), fig=self.canvasPlot.getFigure())
             else:
                 DrawBar(x_ticks, show_data, ylabel=self.comboPlotY.currentText(),
                           name_list=name_list, is_show=False, fig=self.canvasPlot.getFigure())
@@ -412,7 +415,7 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self.canvasPlot.draw()
 
     def UpdateContribution(self):
-        if not self.__is_ui_ready:
+        if (not self.__is_ui_ready) or self.__is_clear:
             return
 
         try:
@@ -526,6 +529,11 @@ class VisualizationConnection(QWidget, Ui_Visualization):
         self.textEditDescription.setPlainText(text)
 
     def UpdateSheet(self):
+        if self.__is_clear:
+            self.comboSheet.setEnabled(False)
+            return None
+
+
         if self.checkMaxFeatureNumber.isChecked():
             self.comboSheet.setEnabled(False)
         else:
@@ -630,6 +638,8 @@ class VisualizationConnection(QWidget, Ui_Visualization):
     def ShowOneResult(self):
         try:
             # for index in self.tableClinicalStatistic.selectedIndexes():
+            if not self.tableClinicalStatistic.selectedIndexes():
+                return None
             index = self.tableClinicalStatistic.selectedIndexes()[0]
             row = index.row()
             one_item = self.tableClinicalStatistic.item(row, 0)
@@ -659,6 +669,7 @@ class VisualizationConnection(QWidget, Ui_Visualization):
                     self.checkPlotCVValidation.isChecked()):
                 self.checkPlotCVValidation.setCheckState(True)
             self.UpdatePlot()
+
 
             # Update the Contribution
             self.comboContributionNormalizor.setCurrentText(current_normalizer)
